@@ -1,0 +1,18 @@
+{application, cowboy2_session,
+ [{description, "An OTP application"},
+  {vsn, "1.0.0"},
+  {registered, []},
+  {mod, {cowboy2_session_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    crypto,
+    mnesia
+   ]},
+  {env,[]},
+  {modules, []},
+
+  {contributors, []},
+  {licenses, []},
+  {links, []}
+ ]}.
