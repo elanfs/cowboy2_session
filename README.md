@@ -16,6 +16,14 @@ make shell
 
 ## Usage
 
+Session Id will be passed into Opts in the cowboy handler `init(Req, Opts)` callback
+
+```erlang
+init(Req, [{esessionid, Id}] = Opts) ->
+  io:format("session_id : ~p~n", [Id]),
+  {ok, Req, Opts}.
+```
+
 Storing Data, Expiry is milliseconds
 
 ```
