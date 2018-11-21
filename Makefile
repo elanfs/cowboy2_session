@@ -15,6 +15,9 @@ REL_BIN = $(REBAR3_BUILD)/rel/$(RELEASE)/bin/$(RELEASE)
 compile:
 	$(PREFIX)rebar3 compile
 
+test:
+	${PREFIX}rebar3 eunit
+
 shell: compile
 	$(WERL) -args_file rel/vm.args -config rel/sys.config $(PLUGIN_EBINS) $(DEP_EBINS) -s $(PROJECT) start
 
@@ -25,4 +28,4 @@ clean:
 clean-all: clean
 	$(PREFIX)rebar3 clean --all
 
-.PHONY: compile fast shell
+.PHONY: compile fast shell test

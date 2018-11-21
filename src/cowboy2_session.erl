@@ -14,8 +14,6 @@
 %-- cowboy middleware callback
 -export([execute/2]).
 
--export([test/0]).
-
 -include("cowboy2_session_defs.hrl").
 
 start() ->
@@ -40,7 +38,8 @@ delete(Id) -> cowboy2_session_svr:delete(Id).
 
 flush() -> cowboy2_session_svr:flush().
 
-keys() -> cowboy2_session_svr:keys().
+keys() -> 
+  mnesia:dirty_all_keys(cowboy2_session).
 
 expire(_Key) -> ok.
 touch(_Key) -> ok.
@@ -101,18 +100,6 @@ execute(Req0, #{ handler_opts := Opts } = Env) ->
 
   end.
 
-
-test() ->
-  cowboy2_session:delete_schema(),
-  cowboy2_session:create_schema(),
-  cowboy2_session:create_db(),
-  cowboy2_session:start(),
-  cowboy2_session:set(1, foo, bar, 2000),
-  cowboy2_session:set(1, foo2, bar2, 2000),
-  {ok, bar} =  cowboy2_session:get(1, foo),
-  cowboy2_session:delete(1).
-  
-  
 %--- private
 
 %-spec get_session(Req::any()) -> {session_id(), Req::any()}.

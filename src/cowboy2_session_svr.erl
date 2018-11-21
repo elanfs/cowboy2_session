@@ -1,7 +1,7 @@
 -module(cowboy2_session_svr).
 
 %- public API
--export([set/4, get/2, mget/2, get_keys/1, delete/1, flush/0, keys/0]).
+-export([set/4, get/2, mget/2, get_keys/1, delete/1, flush/0]).
 
 % usual
 -export([start/0, start_link/0, stop/0]).
@@ -35,9 +35,6 @@ get_keys(Id) ->
 delete(Id) -> gen_server:call(?MODULE, {delete, Id}).
 
 flush() -> mnesia:clear_table(cowboy2_session).
-
-keys() ->
-  gen_server:call(?MODULE, keys).
 
 start() ->
   mnesia:start(),
@@ -86,13 +83,6 @@ handle_call({delete, Id}, _From, State) ->
 
 handle_call(terminate, _From, State) ->
   {stop, normal, ok, State};
-
-handle_call(keys, _From, State) ->
-
-  Q = qlc:q([X || X <- mnesia:table(cowboy2_session)]),
-  Res = mnesia:transaction(fun() -> qlc:e(Q) end),
-
-  {reply, Res, State};
 
 handle_call(_Msg, _From, State) ->
   % io:format("unhandled_call: ~p~n", [Msg]),
