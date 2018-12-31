@@ -8,25 +8,34 @@
 -export([set/3, set/4, get/2, mget/2, get_keys/1, delete/1, flush/0, keys/0]).
 -export([expire/1, touch/1]). % TODO proposed api
 
-%-- local db function
--export([check_db/0, create_schema/0, delete_schema/0, create_db/0, delete_db/0]).
+-export([new_session/1, get_session/1]).
 
 %-- cowboy middleware callback
 -export([execute/2]).
 
--include("cowboy2_session_defs.hrl").
+% -type session_kv() :: #{
+%     id => binary()
+%   , kv_map => map()
+%   , expire_in => integer()
+% }.
+-exported_types([session_id/0, session_key/0]).
+-type session_id() :: binary().
+-type session_key() :: any().
+
+ttl_one_day() -> 86400000.
+ttl_default() -> ttl_one_day() * 30.
 
 start() ->
   application:ensure_all_started(?MODULE).
 
 % expire in milliseconds 1 second = 1000 ms
--spec set(Id::binary(), any(), any()) -> {ok, Key::any()} | {error, any()}.
-set(Id, Key, Val) -> cowboy2_session_svr:set(Id, Key, Val, ?S_SESS_DEFAULT_TTL).
+-spec set(session_id(), session_key(), any()) -> {ok, session_key()} | {error, any()}.
+set(Id, Key, Val) -> cowboy2_session_svr:set(Id, Key, Val, ttl_default()).
 
--spec set(Id::binary(), any(), any(), Expire::non_neg_integer()) -> {ok, Key::any()} | {error, any()}.
+-spec set(session_id(), any(), any(), Expire::non_neg_integer()) -> {ok, Key::any()} | {error, any()}.
 set(Id, Key, Val, Expire) -> cowboy2_session_svr:set(Id, Key, Val, Expire).
 
--spec get(Id::binary(), Key::any()) -> not_found | {ok, any()} | {error, any()}.
+-spec get(session_id(), Key::any()) -> not_found | {ok, any()} | {error, any()}.
 get(Id, Key) -> cowboy2_session_svr:get(Id, Key).
 
 % get multiple keys
@@ -38,50 +47,11 @@ delete(Id) -> cowboy2_session_svr:delete(Id).
 
 flush() -> cowboy2_session_svr:flush().
 
-keys() -> 
+keys() ->
   mnesia:dirty_all_keys(cowboy2_session).
 
 expire(_Key) -> ok.
 touch(_Key) -> ok.
-
-
-check_db() ->
-  % check if schema created
-  case mnesia:table_info(schema, disc_copies) of
-    [] ->
-      % io:format("fresh db, creating schema on node: ~p~n", [node()]),
-      ?MODULE:create_schema();
-    _ -> ok
-  end,
-  Tables = mnesia:system_info(tables),
-  case lists:member(?MODULE, Tables) of
-    false ->
-      % io:format("no tables found, creating...~n"),
-      ?MODULE:create_db();
-    true ->
-      % io:format("found tables, loading: ~p~n", [Tables]),
-      mnesia:wait_for_tables(Tables, 10000),
-      ok
-  end.
-
-create_schema() ->
-  mnesia:stop(),
-  mnesia:create_schema([node()]),
-  mnesia:start().
-
-delete_schema() ->
-  mnesia:stop(),
-  mnesia:delete_schema([node()]),
-  mnesia:start().
-
-create_db() ->
-  mnesia:create_table(?MODULE, [
-    {attributes, record_info(fields, ?MODULE)}
-    ,{disc_copies, [node()]}
-  ]).
-  
-delete_db() -> mnesia:delete_table(?MODULE).
-  
 
 %--- overload cowboy middleware callback
 %---
@@ -93,7 +63,7 @@ execute(Req0, #{ handler_opts := Opts } = Env) ->
       {SessId, Req1} = get_session(Req0),
 
       % io:format("Env: ~p~n", [Env]),
-      
+
       Env2 = Env#{ handler_opts := [{esessionid, SessId} | Opts] },
 
       {ok, Req1, Env2}
@@ -101,58 +71,40 @@ execute(Req0, #{ handler_opts := Opts } = Env) ->
   end.
 
 %--- private
-
-%-spec get_session(Req::any()) -> {session_id(), Req::any()}.
-get_session(Req) ->
-    MatchCookies = [{esessionid, [], <<>>}],
-    case cowboy_req:match_cookies(MatchCookies, Req) of
-      #{esessionid := <<>>} ->
-          % io:format("empty cookie~n"),
-          new_session(Req);
-    
-        #{esessionid := Esession} ->
-          SessId = decrypt(?S_SESS_KEY, Esession),
-          % io:format("existing session: ~p~n", [SessId]),
-          % check if session valid
-          case cowboy2_session:get_keys(SessId) of
-            not_found -> new_session(Req);
-            _Keys -> {SessId, Req}
-          end;
-        
-        _ ->
-          % io:format("new session ~n"),
-          new_session(Req)
-    end.
-
-
 new_session(Req) ->
-  Id = gen_session_id(),
-  EncryptedId = encrypt(?S_SESS_KEY, Id),
+  Id = cowboy2_session_g:gen_session_id(),
+  Secret = cowboy2_session_g:get_session_secret(),
+  EncryptedId = cowboy2_session_g:encrypt(Secret, Id),
   % io:format("new_session: ~p:~p~n", [Id, EncryptedId]),
   LastSeen = cowboy2_session_g:unixtime(),
-  cowboy2_session:set(Id, last_seen, LastSeen, ?S_SESS_DEFAULT_TTL),
+  cowboy2_session:set(Id, last_seen, LastSeen, ttl_default()),
 	Req1 = cowboy_req:set_resp_cookie(
     <<"esessionid">>, EncryptedId,
     Req, #{
        path => <<"/">>
-      ,max_age => ?S_SESS_DEFAULT_TTL div 1000    
+      ,max_age => ttl_default() div 1000
     }),
   {Id, Req1}.
 
+%-spec get_session(Req::any()) -> {session_id(), Req::any()}.
+get_session(Req) ->
+  MatchCookies = [{esessionid, [], <<>>}],
+  case cowboy_req:match_cookies(MatchCookies, Req) of
+    #{esessionid := <<>>} ->
+        % io:format("empty cookie~n"),
+        ?MODULE:new_session(Req);
 
+      #{esessionid := Esession} ->
+        Secret = cowboy2_session_g:get_session_secret(),
+        SessId = cowboy2_session_g:decrypt(Secret, Esession),
+        % io:format("existing session: ~p~n", [SessId]),
+        % check if session valid
+        case cowboy2_session:get_keys(SessId) of
+          not_found -> ?MODULE:new_session(Req);
+          _Keys -> {SessId, Req}
+        end;
 
-gen_session_id() ->
-  NumBytes = 4,
-  list_to_binary(integer_to_list(
-    crypto:bytes_to_integer(crypto:strong_rand_bytes(NumBytes)))).
-
-
-encrypt(Key, Plain) ->
-  S0 = crypto:stream_init(rc4, Key),
-  {_S1, Cipher} = crypto:stream_encrypt(S0, Plain),
-  base64:encode(Cipher).
-
-decrypt(Key, Base64Cipher) ->
-  S0 = crypto:stream_init(rc4, Key),
-  {_S1, Plain} = crypto:stream_decrypt(S0, base64:decode(Base64Cipher)),
-  Plain.
+      _ ->
+        % io:format("new session ~n"),
+        ?MODULE:new_session(Req)
+    end.

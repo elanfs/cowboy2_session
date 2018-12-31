@@ -9,8 +9,24 @@
 -export([init/1, handle_call/3, handle_cast/2
   ,handle_info/2,terminate/2, code_change/3]).
 
+%-- local db function
+-export([check_db/0, create_schema/0, delete_schema/0, create_db/0, delete_db/0]).
+
 -include_lib("stdlib/include/qlc.hrl").
--include("cowboy2_session_defs.hrl").
+
+-record(cowboy2_session, {
+  id :: binary(), % session id
+  kv_map :: map(),
+  expire_in  :: Millis::integer()
+}).
+
+-record(cowboy2_session_secret, {
+  id :: non_neg_integer(),
+  value :: binary()
+}).
+
+ % ms
+ttl_purge_default() -> 10000.
 
 %-- Expire in millis
 set(Id, Key, Val, Expire) ->
@@ -38,17 +54,19 @@ flush() -> mnesia:clear_table(cowboy2_session).
 
 start() ->
   mnesia:start(),
+  ?MODULE:check_db(),
   gen_server:start({local, ?MODULE}, ?MODULE, [], []).
 
 
 start_link() ->
+  ?MODULE:check_db(),
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 stop() -> gen_server:call(?MODULE, terminate).
 
 
 init([]) ->
-  % process_flag(trap_exit, true),
+  process_flag(trap_exit, true),
   % io:format("~p starting~n", [?MODULE]),
   {ok, #{}, 0}.
 
@@ -76,7 +94,7 @@ handle_call({get_keys, Id}, _From, State) ->
   end;
 
 handle_call({delete, Id}, _From, State) ->
-  Res = mnesia:transaction(fun() -> 
+  Res = mnesia:transaction(fun() ->
     mnesia:delete({cowboy2_session, Id}) end),
 
   {reply, Res, State};
@@ -94,10 +112,11 @@ handle_cast(_Msg, State) ->
 
 
 handle_info(timeout, State) ->
+  generate_encryption_key(),
   % flush session on restart
   ?MODULE:flush(),
   % purge every 5 seconds
-  erlang:send_after(?S_DEFAULT_PURGE_TIMER, self(), purge),
+  erlang:send_after(ttl_purge_default(), self(), purge),
   {noreply, State};
 
 handle_info(purge, State) ->
@@ -119,7 +138,7 @@ handle_info(purge, State) ->
   end,
   _Ret = mnesia:transaction(T),
   %io:format("purged: ~p~n", [Ret]),
-  erlang:send_after(?S_DEFAULT_PURGE_TIMER, self(), purge),
+  erlang:send_after(ttl_purge_default(), self(), purge),
   {noreply, State};
 
 handle_info(_Msg, State) ->
@@ -137,7 +156,58 @@ terminate(_Reason, #{db := DB}) ->
   io:format("~p stopping~n", [?MODULE]),
   ok.
 
+%%--------------
+%% Mnesia helpers
+check_db() ->
+  % check if schema created
+  case mnesia:table_info(schema, disc_copies) of
+    [] ->
+      % io:format("fresh db, creating schema on node: ~p~n", [node()]),
+      ?MODULE:create_schema();
+    _ -> ok
+  end,
+  Tables = mnesia:system_info(tables),
+  case lists:member(?MODULE, Tables) of
+    false ->
+      % io:format("no tables found, creating...~n"),
+      ?MODULE:create_db();
+    true ->
+      % io:format("found tables, loading: ~p~n", [Tables]),
+      mnesia:wait_for_tables(Tables, 10000),
+      ok
+  end.
+
+create_schema() ->
+  mnesia:stop(),
+  mnesia:create_schema([node()]),
+  mnesia:start().
+
+delete_schema() ->
+  mnesia:stop(),
+  mnesia:delete_schema([node()]),
+  mnesia:start().
+
+create_db() ->
+  mnesia:create_table(cowboy2_session, [
+    {attributes, record_info(fields, cowboy2_session)}
+    ,{disc_copies, [node()]}
+  ]),
+  mnesia:create_table(cowboy2_session_secret, [
+    {attributes, record_info(fields, cowboy2_session_secret)}
+    ,{ram_copies, [node()]}
+  ]).
+
+
+delete_db() -> mnesia:delete_table(?MODULE).
+
+
 %-- Private
+generate_encryption_key() ->
+  Secret = base64:encode(crypto:strong_rand_bytes(64)),
+  mnesia:dirty_write(#cowboy2_session_secret{
+    id = 0, value = Secret
+  }).
+
 read_key(Id, Key) ->
   fun() ->
     case mnesia:read(cowboy2_session, Id, write) of
