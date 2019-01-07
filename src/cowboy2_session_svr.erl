@@ -192,7 +192,7 @@ create_db() ->
   ]),
   mnesia:create_table(cowboy2_session_secret, [
     {attributes, record_info(fields, cowboy2_session_secret)}
-    ,{ram_copies, [node()]}
+    ,{disc_copies, [node()]}
   ]).
 
 
@@ -201,10 +201,15 @@ delete_db() -> mnesia:delete_table(?MODULE).
 
 %-- Private
 generate_encryption_key() ->
-  Secret = base64:encode(crypto:strong_rand_bytes(64)),
-  mnesia:dirty_write(#cowboy2_session_secret{
-    id = 0, value = Secret
-  }).
+  case mnesia:dirty_read(cowboy2_session_secret, 0) of
+    [] ->
+      Secret = base64:encode(crypto:strong_rand_bytes(64)),
+      mnesia:dirty_write(#cowboy2_session_secret{
+        id = 0, value = Secret
+      })
+    ; _ ->
+      ok
+  end.
 
 read_key(Id, Key) ->
   fun() ->
