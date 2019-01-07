@@ -1,5 +1,4 @@
 -module(cowboy2_session).
--behaviour(cowboy_middleware).
 
 %-- app
 -export([start/0]).
@@ -10,6 +9,7 @@
 
 -export([new_session/1, get_session/1]).
 
+% -behaviour(cowboy_middleware).
 %-- cowboy middleware callback
 -export([execute/2]).
 

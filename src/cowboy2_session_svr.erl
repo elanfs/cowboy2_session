@@ -113,9 +113,7 @@ handle_cast(_Msg, State) ->
 
 handle_info(timeout, State) ->
   generate_encryption_key(),
-  % flush session on restart
-  ?MODULE:flush(),
-  % purge every 5 seconds
+  % schedule purge event
   erlang:send_after(ttl_purge_default(), self(), purge),
   {noreply, State};
 
