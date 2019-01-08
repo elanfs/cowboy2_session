@@ -149,8 +149,7 @@ code_change(_OldVsn, N, _Extra) ->
   {ok, N}.
 
 
-terminate(_Reason, #{db := DB}) ->
-  DB:close(),
+terminate(_Reason, _State) ->
   io:format("~p stopping~n", [?MODULE]),
   ok.
 
