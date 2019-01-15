@@ -84,7 +84,7 @@ handle_call({set, Id, Key, Val, Expire}, _From, State) ->
 
 handle_call({mset, Id, KvList, Expire}, _From, State) ->
   case mnesia:transaction(
-    update_key_many(Id, KvList, Expire)
+    update_key_many(Id, KvList, cowboy2_session_g:unixtime() + Expire)
   ) of
     {atomic, ok} -> {reply, {ok, KvList}, State}
     ; Err -> {reply, {error, Err}, State}
@@ -258,11 +258,11 @@ update_key_many(Id, KvList, Expire) ->
         mnesia:write(#cowboy2_session{
             id = Id
           , kv_map = maps:from_list(KvList)
-          , expire_in = cowboy2_session_g:unixtime() + Expire
+          , expire_in = Expire
         })
 
       ; [Rec = #cowboy2_session{ kv_map = KvMap }] ->
-        KvMap2 = maps:merge(KvMap, maps:from_list(KvList)),      
+        KvMap2 = maps:merge(KvMap, maps:from_list(KvList)),
         mnesia:write(Rec#cowboy2_session{ kv_map = KvMap2})
     end
   end.
