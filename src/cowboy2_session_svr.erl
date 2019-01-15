@@ -1,7 +1,7 @@
 -module(cowboy2_session_svr).
 
 %- public API
--export([set/4, get/2, mget/2, get_keys/1, delete/1, flush/0]).
+-export([set/4, mset/3, get/2, mget/2, get_keys/1, delete/1, flush/0]).
 
 % usual
 -export([start/0, start_link/0, stop/0]).
@@ -31,6 +31,10 @@ ttl_purge_default() -> 10000.
 %-- Expire in millis
 set(Id, Key, Val, Expire) ->
   gen_server:call(?MODULE, {set, Id, Key, Val, Expire}).
+
+%-- Expire in millis
+mset(Id, KvList, Expire) ->
+  gen_server:call(?MODULE, {mset, Id, KvList, Expire}).
 
 get(Id, Key) ->
   gen_server:call(?MODULE, {get, Id, Key}).
@@ -72,10 +76,18 @@ init([]) ->
 
 handle_call({set, Id, Key, Val, Expire}, _From, State) ->
   case mnesia:transaction(
-    update_key(Id,Key, Val, cowboy2_session_g:unixtime() + Expire)
+    update_key(Id, Key, Val, cowboy2_session_g:unixtime() + Expire)
   ) of
     {atomic, ok} -> {reply, {ok, Key}, State};
     Err -> {reply, {error, Err}, State}
+  end;
+
+handle_call({mset, Id, KvList, Expire}, _From, State) ->
+  case mnesia:transaction(
+    update_key_many(Id, KvList, Expire)
+  ) of
+    {atomic, ok} -> {reply, {ok, KvList}, State}
+    ; Err -> {reply, {error, Err}, State}
   end;
 
 handle_call({get, Id, Key}, _From, State) ->
@@ -236,5 +248,21 @@ update_key(Id, Key, Val, Expire) ->
         mnesia:write(Rec#cowboy2_session{ kv_map = KVMap2 });
 
       Other -> Other
+    end
+  end.
+
+update_key_many(Id, KvList, Expire) ->
+  fun() ->
+    case mnesia:read(cowboy2_session, Id, write) of
+      [] ->
+        mnesia:write(#cowboy2_session{
+            id = Id
+          , kv_map = maps:from_list(KvList)
+          , expire_in = cowboy2_session_g:unixtime() + Expire
+        })
+
+      ; [Rec = #cowboy2_session{ kv_map = KvMap }] ->
+        KvMap2 = maps:merge(KvMap, maps:from_list(KvList)),      
+        mnesia:write(Rec#cowboy2_session{ kv_map = KvMap2})
     end
   end.

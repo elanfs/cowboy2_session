@@ -4,7 +4,13 @@
 -export([start/0]).
 
 %-- api
--export([set/3, set/4, get/2, mget/2, get_keys/1, delete/1, flush/0, keys/0]).
+-export([
+  set/3, set/4, mset/2, mset/3
+  , get/2, mget/2, get_keys/1
+  , delete/1
+  , flush/0, keys/0
+]).
+
 -export([expire/1, touch/1]). % TODO proposed api
 
 -export([new_session/1, get_session/1]).
@@ -34,6 +40,14 @@ set(Id, Key, Val) -> cowboy2_session_svr:set(Id, Key, Val, ttl_default()).
 
 -spec set(session_id(), any(), any(), Expire::non_neg_integer()) -> {ok, Key::any()} | {error, any()}.
 set(Id, Key, Val, Expire) -> cowboy2_session_svr:set(Id, Key, Val, Expire).
+
+-spec mset(session_id(), list()) -> {ok, Key::any()} | {error, any()}.
+mset(Id, Kvlist) -> 
+  ?MODULE:mset(Id, Kvlist, ttl_default()).
+
+-spec mset(session_id(), list(), non_neg_integer()) -> {ok, Key::any()} | {error, any()}.
+mset(Id, Kvlist, Expire) -> 
+  cowboy2_session_svr:mset(Id, Kvlist, Expire).
 
 -spec get(session_id(), Key::any()) -> not_found | {ok, any()} | {error, any()}.
 get(Id, Key) -> cowboy2_session_svr:get(Id, Key).
