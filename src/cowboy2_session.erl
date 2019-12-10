@@ -4,7 +4,7 @@
 -export([start/0]).
 
 %% constants
--export([ttl_default/0, cookie_name/0]).
+-export([ttl_default/0, cookie_name/0, cookie_setting/0]).
 
 %% api
 -export([
@@ -28,10 +28,21 @@
 
 -define(S_SESSION_KEY_NAME, <<"esessionid">>).
 
-ttl_one_day() -> 86400000.
-ttl_default() -> ttl_one_day() * 30.
+ttl_one_day_in_seconds() -> 86400.
+ttl_30_days_in_seconds() -> ttl_one_day_in_seconds() * 30.
+ttl_default() -> ttl_30_days_in_seconds().
 
 cookie_name() -> ?S_SESSION_KEY_NAME.
+
+cookie_setting() ->
+  case application:get_env(?MODULE, cookie_setting) of
+    {ok, Setting} -> Setting
+    ; _ -> #{
+       path => <<"/">>
+      , http_only => true
+      , max_age => ttl_default()
+    }
+  end.
 
 start() ->
   application:ensure_all_started(?MODULE).
@@ -89,11 +100,7 @@ new_session(Req) ->
   cowboy2_session:set(Id, last_seen, LastSeen, ttl_default()),
 	Req1 = cowboy_req:set_resp_cookie(
     ?S_SESSION_KEY_NAME, EncryptedId,
-    Req, #{
-       path => <<"/">>
-      , http_only => true
-      , max_age => ttl_default() div 1000
-    }),
+    Req, cookie_setting()),
   {Id, Req1}.
 
 -spec get_session(cowboy_req:req()) -> {session_id(), cowboy_req:req()} | undefined.
