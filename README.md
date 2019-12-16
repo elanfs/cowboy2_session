@@ -3,12 +3,12 @@
 cowboy2_session
 =====
 
-A (work in progress) Session Store for Cowboy2 middleware, (last tested with Cowboy2 rc2)
+A Session Store middleware for Cowboy2 middleware
 
 ## Features
 
-1. works with Cowboy2
-1. stores session data in mnesia disc_copies table
+1. Works with Cowboy2
+1. Stores session data in mnesia disc_copies table
 
 ## Try Out
 
@@ -55,7 +55,7 @@ Add to Cowboy2 as middleware
 example
 
 ```erlang
-{ok, _} = cowboy:start_clear(http, [{port, 8080}], #{
+cowboy:start_clear(http, [{port, 8080}], #{
     env => #{dispatch => Dispatch}
   ,middlewares => [cowboy_router, cowboy2_session, cowboy_handler]
 }).
