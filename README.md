@@ -1,3 +1,5 @@
+[![CircleCI](https://circleci.com/gh/elanfs/cowboy2_session/tree/master.svg?style=svg)](https://circleci.com/gh/elanfs/cowboy2_session/tree/master)
+
 cowboy2_session
 =====
 
