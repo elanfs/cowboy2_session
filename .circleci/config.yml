@@ -1,0 +1,16 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: elanfs/erlang-dev:21.3
+        command: ["/bin/bash"]
+    steps:
+      - checkout
+      - run:
+          name: Build Package
+          command: |
+            make
+      - run:
+          name: Eunit Test
+          command: |
+            make test
