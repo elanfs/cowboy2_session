@@ -46,6 +46,8 @@ cowboy2_session:get_keys(<<"1111">>, Key, Value)
 
 ## Getting Started
 
+### Register middleware
+
 To auto start cowboy2_session, add `cowboy2_session` into your app.src
 
 or start manually `cowboy2_session:start`
@@ -61,3 +63,18 @@ cowboy:start_clear(http, [{port, 8080}], #{
 }).
 ```
 
+## Getting SessionId
+
+```erlang
+init(Req0, Opts) ->
+  {SessionId, Req1} = case proplists:get_value(esessionid, Opts) of
+    undefined -> cowboy2_session:new_session(Req0)
+    ;ExistingSessionId -> {SessionId, Req0}
+  end,
+
+  cowboy2_session:set(SessionId, foo, bar),
+  Req2 = cowboy_req:reply(200, #{
+    <<"content-type">> => <<"text/plain">>
+  }, <<"Hello world!">>, Req1),
+  {ok, Req2, Opts}.
+```
