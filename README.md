@@ -69,7 +69,7 @@ cowboy:start_clear(http, [{port, 8080}], #{
 init(Req0, Opts) ->
   {SessionId, Req1} = case proplists:get_value(esessionid, Opts) of
     undefined -> cowboy2_session:new_session(Req0)
-    ;ExistingSessionId -> {SessionId, Req0}
+    ;ExistingSessionId -> {ExistingSessionId, Req0}
   end,
 
   cowboy2_session:set(SessionId, foo, bar),
