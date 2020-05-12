@@ -1,0 +1,2 @@
+-name cowboy2_session@127.0.0.1
+-setcookie __cowboy2_session_dev_cookie__
