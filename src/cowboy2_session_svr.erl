@@ -58,12 +58,10 @@ flush() -> mnesia:clear_table(cowboy2_session).
 
 start() ->
   mnesia:start(),
-  ?MODULE:check_db(),
   gen_server:start({local, ?MODULE}, ?MODULE, [], []).
 
 
 start_link() ->
-  ?MODULE:check_db(),
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 stop() -> gen_server:call(?MODULE, terminate).
@@ -124,6 +122,12 @@ handle_cast(_Msg, State) ->
 
 
 handle_info(timeout, State) ->
+  ?MODULE:check_db(),
+  erlang:send_after(5000, self(), generate_key),
+  {noreply, State};
+
+handle_info(generate_key, State) ->
+  io:format("generating key..."),
   generate_encryption_key(),
   % schedule purge event
   erlang:send_after(ttl_purge_default(), self(), purge),
@@ -171,17 +175,17 @@ check_db() ->
   % check if schema created
   case mnesia:table_info(schema, disc_copies) of
     [] ->
-      % io:format("fresh db, creating schema on node: ~p~n", [node()]),
+      io:format("fresh db, creating schema on node: ~p~n", [node()]),
       ?MODULE:create_schema();
     _ -> ok
   end,
   Tables = mnesia:system_info(tables),
   case lists:member(?MODULE, Tables) of
     false ->
-      % io:format("no tables found, creating...~n"),
+      io:format("no tables found, creating...~n"),
       ?MODULE:create_db();
     true ->
-      % io:format("found tables, loading: ~p~n", [Tables]),
+      io:format("found tables, loading: ~p~n", [Tables]),
       mnesia:wait_for_tables(Tables, 10000),
       ok
   end.

@@ -28,6 +28,8 @@
 
 -define(S_SESSION_KEY_NAME, <<"esessionid">>).
 
+-include_lib("kernel/include/logger.hrl").
+
 ttl_one_day_in_seconds() -> 86400.
 ttl_30_days_in_seconds() -> ttl_one_day_in_seconds() * 30.
 ttl_default() -> ttl_30_days_in_seconds().
@@ -44,6 +46,12 @@ cookie_setting() ->
     }
   end.
 
+exclude_paths() ->
+  case application:get_env(?MODULE, exclude_paths) of
+    {ok, ExcludePaths} -> ExcludePaths;
+    _ -> []
+  end.
+
 start() ->
   application:ensure_all_started(?MODULE).
 
@@ -55,11 +63,11 @@ set(Id, Key, Val) -> cowboy2_session_svr:set(Id, Key, Val, ttl_default()).
 set(Id, Key, Val, Expire) -> cowboy2_session_svr:set(Id, Key, Val, Expire).
 
 -spec mset(session_id(), list()) -> {ok, Key::any()} | {error, any()}.
-mset(Id, Kvlist) -> 
+mset(Id, Kvlist) ->
   ?MODULE:mset(Id, Kvlist, ttl_default()).
 
 -spec mset(session_id(), list(), non_neg_integer()) -> {ok, Key::any()} | {error, any()}.
-mset(Id, Kvlist, Expire) -> 
+mset(Id, Kvlist, Expire) ->
   cowboy2_session_svr:mset(Id, Kvlist, Expire).
 
 -spec get(session_id(), Key::any()) -> not_found | {ok, any()} | {error, any()}.
@@ -83,19 +91,38 @@ touch(_Key) -> ok.
 %% overload cowboy middleware callback
 %%
 execute(Req, #{ handler_opts := Opts } = Env) ->
-  case get_session(Req) of
-    undefined -> { ok, Req, Env }
-  
-    ; {SessId, Req1} -> 
-      {ok, Req1, Env#{ handler_opts := [{esessionid, SessId} | Opts] } }
+  Method = cowboy_req:method(Req),
+  Path = cowboy_req:path(Req),
+  ?LOG_INFO("~s ~s", [Method, Path]),
+  case is_path_excluded(Path, exclude_paths()) of
+    true ->
+      { ok, Req, Env };
+
+    false ->
+
+      case get_session(Req) of
+        undefined ->
+          { ok, Req, Env };
+
+        {SessId, Req1} ->
+          {ok, Req1, Env#{ handler_opts := [{esessionid, SessId} | Opts] } }
+      end
   end.
+
+is_path_excluded(Path, ExcludePaths) ->
+  NumOfMatches = lists:foldr(fun(CurrPattern, Acc) ->
+    case string:find(Path, CurrPattern, leading) of
+      nomatch -> Acc;
+      _ -> Acc+1
+    end
+  end, 0, ExcludePaths),
+  NumOfMatches > 0.
 
 -spec new_session(cowboy_req:req()) -> {session_id(), cowboy_req:req()}.
 new_session(Req) ->
   Id = cowboy2_session_g:gen_session_id(),
   Secret = cowboy2_session_g:get_session_secret(),
   EncryptedId = cowboy2_session_g:encrypt(Secret, Id),
-  % io:format("new_session: ~p:~p~n", [Id, EncryptedId]),
   LastSeen = cowboy2_session_g:unixtime(),
   cowboy2_session:set(Id, last_seen, LastSeen, ttl_default()),
 	Req1 = cowboy_req:set_resp_cookie(
@@ -105,19 +132,21 @@ new_session(Req) ->
 
 -spec get_session(cowboy_req:req()) -> {session_id(), cowboy_req:req()} | undefined.
 get_session(Req) ->
-  MatchCookies = [{esessionid, [], <<>>}],
-  case cowboy_req:match_cookies(MatchCookies, Req) of
-    #{esessionid := <<>>} ->
-      undefined
+  Cookies = cowboy_req:parse_cookies(Req),
+  SessionIdKey = <<"esessionid">>,
+  case lists:keyfind(SessionIdKey, 1, Cookies) of
+    false -> undefined;
 
-    ; #{esessionid := Esession} ->
+    {SessionIdKey, <<>>} ->
+      undefined;
+
+    {SessionIdKey, EncryptedSessionValue} ->
         Secret = cowboy2_session_g:get_session_secret(),
-        SessId = cowboy2_session_g:decrypt(Secret, Esession),
-        % io:format("existing session: ~p~n", [SessId]),
+        SessId = cowboy2_session_g:decrypt(Secret, EncryptedSessionValue),
         % check if session valid
         case cowboy2_session:get_keys(SessId) of
           not_found -> undefined;
           _Keys -> {SessId, Req}
         end
 
-    end.
+  end.
