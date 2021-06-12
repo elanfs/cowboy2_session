@@ -1,3 +1,6 @@
+PROJECT := cowboy2_session
+
+REL_BIN := _build/default/rel/$(PROJECT)/bin/$(PROJECT)
 
 compile:
 	./rebar3 compile
@@ -7,6 +10,15 @@ test:
 
 shell: compile clean-db
 	./rebar3 shell --setcookie testcookie --name test@127.0.0.1
+
+rel: ## Creates an otp release (dev)
+	./rebar3 release
+
+start: clean rel ## Start otp app (dev)
+	$(REL_BIN) start
+
+console: clean rel ## Start otp app console (dev)
+	$(REL_BIN) console
 
 clean:
 	./rebar3 clean
