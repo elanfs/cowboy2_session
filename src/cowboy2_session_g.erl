@@ -26,11 +26,8 @@ gen_session_id() ->
 
 
 encrypt(Key, Plain) ->
-  S0 = crypto:stream_init(rc4, Key),
-  {_S1, Cipher} = crypto:stream_encrypt(S0, Plain),
+  Cipher = crypto:crypto_one_time(rc4, Key, Plain, [{encrypt, true}]),
   base64:encode(Cipher).
 
 decrypt(Key, Base64Cipher) ->
-  S0 = crypto:stream_init(rc4, Key),
-  {_S1, Plain} = crypto:stream_decrypt(S0, base64:decode(Base64Cipher)),
-  Plain.
+  crypto:crypto_one_time(rc4, Key, base64:decode(Base64Cipher), [{encrypt, false}]).
