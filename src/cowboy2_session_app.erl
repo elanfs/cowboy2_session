@@ -28,22 +28,22 @@ check_or_create_schema(Nodes) ->
     _ -> ok
   end.
 
-check_or_create_tables(Names) ->
+check_or_create_tables(AppTables) ->
   Tables = mnesia:system_info(tables),
   Results = lists:foldr(fun(Name, Acc) ->
     Res = lists:member(Name, Tables),
     [Res | Acc]
-  end, [], Names),
+  end, [], AppTables),
 
   case not lists:member(false, Results) of
     false ->
       io:format("tables not found, creating...~n"),
       cowboy2_session_svr:create_db();
     true ->
-      io:format("found existing tables, loading: ~p~n", [Tables]),
-      case mnesia:wait_for_tables(Tables, 10000) of
+      io:format("found existing tables, loading: ~p~n", [AppTables]),
+      case mnesia:wait_for_tables(AppTables, 10000) of
         ok ->
-          io:format("done loading tables: ~p~n", [Tables]);
+          io:format("done loading tables: ~p~n", [AppTables]);
         {error, Reason} ->
           io:format("error loading tables: ~p~n", [Reason]);
         {timeout, TimeoutTables} ->

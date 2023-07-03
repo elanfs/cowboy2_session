@@ -122,7 +122,7 @@ handle_cast(_Msg, State) ->
 
 
 handle_info(timeout, State) ->
-  io:format("generating key..."),
+  io:format("generating encryption key...~n"),
   generate_encryption_key(),
   % schedule purge event
   erlang:send_after(ttl_purge_default(), self(), purge),
