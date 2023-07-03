@@ -10,7 +10,7 @@
   ,handle_info/2,terminate/2, code_change/3]).
 
 %-- local db function
--export([check_db/0, create_schema/0, delete_schema/0, create_db/0, delete_db/0]).
+-export([create_schema/0, delete_schema/0, create_db/0, delete_db/0]).
 
 -include_lib("stdlib/include/qlc.hrl").
 
@@ -122,11 +122,6 @@ handle_cast(_Msg, State) ->
 
 
 handle_info(timeout, State) ->
-  ?MODULE:check_db(),
-  erlang:send_after(5000, self(), generate_key),
-  {noreply, State};
-
-handle_info(generate_key, State) ->
   io:format("generating key..."),
   generate_encryption_key(),
   % schedule purge event
@@ -171,25 +166,6 @@ terminate(_Reason, _State) ->
 
 %%--------------
 %% Mnesia helpers
-check_db() ->
-  % check if schema created
-  case mnesia:table_info(schema, disc_copies) of
-    [] ->
-      io:format("fresh db, creating schema on node: ~p~n", [node()]),
-      ?MODULE:create_schema();
-    _ -> ok
-  end,
-  Tables = mnesia:system_info(tables),
-  case lists:member(?MODULE, Tables) of
-    false ->
-      io:format("no tables found, creating...~n"),
-      ?MODULE:create_db();
-    true ->
-      io:format("found tables, loading: ~p~n", [Tables]),
-      mnesia:wait_for_tables(Tables, 10000),
-      ok
-  end.
-
 create_schema() ->
   mnesia:stop(),
   mnesia:create_schema([node()]),
@@ -211,7 +187,9 @@ create_db() ->
   ]).
 
 
-delete_db() -> mnesia:delete_table(?MODULE).
+delete_db() ->
+  mnesia:delete_table(cowboy2_session),
+  mnesia:delete_table(cowboy2_session_secret).
 
 
 %-- Private

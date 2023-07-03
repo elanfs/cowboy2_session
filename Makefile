@@ -17,7 +17,7 @@ rel: ## Creates an otp release (dev)
 start: clean rel ## Start otp app (dev)
 	$(REL_BIN) start
 
-console: clean rel ## Start otp app console (dev)
+console: rel ## Start otp app console (dev)
 	$(REL_BIN) console
 
 clean:
