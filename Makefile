@@ -30,4 +30,4 @@ clean-db:
 clean-all: clean clean-db
 	./rebar3 clean --all
 
-.PHONY: compile fast shell test
+.PHONY: compile rel fast shell test
