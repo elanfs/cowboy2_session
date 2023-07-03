@@ -12,6 +12,7 @@
 %-- local db function
 -export([create_schema/0, delete_schema/0, create_db/0, delete_db/0]).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
 -record(cowboy2_session, {
@@ -69,7 +70,6 @@ stop() -> gen_server:call(?MODULE, terminate).
 
 init([]) ->
   process_flag(trap_exit, true),
-  % io:format("~p starting~n", [?MODULE]),
   {ok, #{}, 0}.
 
 handle_call({set, Id, Key, Val, Expire}, _From, State) ->
@@ -113,16 +113,14 @@ handle_call(terminate, _From, State) ->
   {stop, normal, ok, State};
 
 handle_call(_Msg, _From, State) ->
-  % io:format("unhandled_call: ~p~n", [Msg]),
   {stop, normal, ok, State}.
 
 handle_cast(_Msg, State) ->
-  % io:format("handle_cast: ~p~n", [Msg]),
   {noreply, State}.
 
 
 handle_info(timeout, State) ->
-  io:format("generating encryption key...~n"),
+  ?LOG_INFO("generating encryption key..."),
   generate_encryption_key(),
   % schedule purge event
   erlang:send_after(ttl_purge_default(), self(), purge),
@@ -146,22 +144,19 @@ handle_info(purge, State) ->
     end
   end,
   _Ret = mnesia:transaction(T),
-  %io:format("purged: ~p~n", [Ret]),
   erlang:send_after(ttl_purge_default(), self(), purge),
   {noreply, State};
 
 handle_info(_Msg, State) ->
-  % io:format("handle_info: ~p~n", [Msg]),
   {noreply, State}.
 
 
 code_change(_OldVsn, N, _Extra) ->
-  % io:format("code_change ~p,~p,~p", [OldVsn, N, Extra]),
   {ok, N}.
 
 
 terminate(_Reason, _State) ->
-  io:format("~p stopping~n", [?MODULE]),
+  ?LOG_INFO("~p stopping~n", [?MODULE]),
   ok.
 
 %%--------------

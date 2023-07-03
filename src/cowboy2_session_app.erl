@@ -4,6 +4,7 @@
 -export([start/2
         ,stop/1]).
 
+-include_lib("kernel/include/logger.hrl").
 
 start(_StartType, _StartArgs) ->
   check_db(),
@@ -23,7 +24,7 @@ check_or_create_schema(Nodes) ->
   % check if schema created
   case mnesia:table_info(schema, disc_copies) of
     [] ->
-      io:format("fresh db, creating schema on node: ~p~n", [Nodes]),
+      ?LOG_INFO("fresh db, creating schema on node: ~p~n", [Nodes]),
       cowboy2_session_svr:create_schema();
     _ -> ok
   end.
@@ -37,16 +38,16 @@ check_or_create_tables(AppTables) ->
 
   case not lists:member(false, Results) of
     false ->
-      io:format("tables not found, creating...~n"),
+      ?LOG_INFO("tables not found, creating..."),
       cowboy2_session_svr:create_db();
     true ->
-      io:format("found existing tables, loading: ~p~n", [AppTables]),
+      ?LOG_INFO("found existing tables, loading: ~p~n", [AppTables]),
       case mnesia:wait_for_tables(AppTables, 10000) of
         ok ->
-          io:format("done loading tables: ~p~n", [AppTables]);
+          ?LOG_INFO("done loading tables: ~p~n", [AppTables]);
         {error, Reason} ->
-          io:format("error loading tables: ~p~n", [Reason]);
+          ?LOG_ERROR("error loading tables: ~p~n", [Reason]);
         {timeout, TimeoutTables} ->
-          io:format("timeout loading tables: ~p~n", [TimeoutTables])
+          ?LOG_WARNING("timeout loading tables: ~p~n", [TimeoutTables])
       end
   end.
